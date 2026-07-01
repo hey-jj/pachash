@@ -22,6 +22,8 @@ pub enum StoreError {
     Metadata(MetadataError),
     /// The file is not a PaCHash store.
     WrongType,
+    /// The header declares more blocks than the file holds.
+    TruncatedBody,
 }
 
 impl core::fmt::Display for StoreError {
@@ -30,6 +32,9 @@ impl core::fmt::Display for StoreError {
             StoreError::ReservedKey => write!(f, "key 0 is reserved for metadata"),
             StoreError::Metadata(e) => write!(f, "{e}"),
             StoreError::WrongType => write!(f, "opened file of wrong type"),
+            StoreError::TruncatedBody => {
+                write!(f, "file is shorter than its declared block count")
+            }
         }
     }
 }
@@ -140,6 +145,9 @@ impl<I: Index> PaCHashObjectStore<I> {
             return Err(StoreError::WrongType);
         }
         let num_blocks = metadata.num_blocks as usize;
+        if num_blocks > data.len() / BLOCK_LENGTH {
+            return Err(StoreError::TruncatedBody);
+        }
         let max_size = metadata.max_size as usize;
         let num_bins = num_blocks * a as usize;
 

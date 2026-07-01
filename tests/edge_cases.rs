@@ -118,6 +118,23 @@ fn truncated_file_rejected() {
     assert_eq!(err, MetadataError::Truncated);
 }
 
+#[test]
+fn forged_block_count_is_rejected_not_panicked() {
+    // A header whose declared block count exceeds the file body must yield an
+    // error, not a panic. 1 << 52 also proves the check does not overflow:
+    // (1 << 52) * BLOCK_LENGTH wraps to 0 in a plain multiply.
+    for forged in [1000u64, 1u64 << 52] {
+        let mut bytes = PaCHashObjectStore::<EliasFanoIndex>::write_to_file(vec![]).unwrap();
+        bytes[40..48].copy_from_slice(&forged.to_le_bytes()); // num_blocks field
+
+        let err = PaCHashObjectStore::<EliasFanoIndex>::build_index(8, bytes.clone()).unwrap_err();
+        assert_eq!(err, StoreError::TruncatedBody);
+
+        let err = LinearObjectReader::new(&bytes).unwrap_err();
+        assert_eq!(err, MetadataError::Truncated);
+    }
+}
+
 fn build(items: Vec<(u64, Vec<u8>)>) -> PaCHashObjectStore<EliasFanoIndex> {
     let bytes = PaCHashObjectStore::<EliasFanoIndex>::write_to_file(items).unwrap();
     PaCHashObjectStore::<EliasFanoIndex>::build_index(8, bytes).unwrap()

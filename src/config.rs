@@ -90,7 +90,7 @@ impl StoreMetadata {
 /// Errors from reading a store header.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MetadataError {
-    /// The first 56 bytes are not available.
+    /// The file is shorter than the metadata or its declared block count.
     Truncated,
     /// The magic bytes do not match a store file.
     BadMagic,

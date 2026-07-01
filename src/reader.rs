@@ -44,6 +44,9 @@ impl<'a> LinearObjectReader<'a> {
     pub fn new(data: &'a [u8]) -> Result<LinearObjectReader<'a>, crate::config::MetadataError> {
         let metadata = StoreMetadata::from_bytes(data)?;
         let num_blocks = metadata.num_blocks as usize;
+        if num_blocks > data.len() / BLOCK_LENGTH {
+            return Err(crate::config::MetadataError::Truncated);
+        }
         let block = BlockStorage::parse(&data[0..BLOCK_LENGTH]);
         let mut reader = LinearObjectReader {
             data,
