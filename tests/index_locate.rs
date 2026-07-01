@@ -24,9 +24,9 @@ fn assert_three_indices_agree(a: u16, items: Vec<(u64, Vec<u8>)>) {
 
     for (key, value) in &items {
         let want = &value[..];
-        assert_eq!(ef.query(*key).unwrap().value, want, "ef key={key}");
-        assert_eq!(ub.query(*key).unwrap().value, want, "ub key={key}");
-        assert_eq!(cb.query(*key).unwrap().value, want, "cb key={key}");
+        assert_eq!(ef.query(*key).unwrap().as_ref(), want, "ef key={key}");
+        assert_eq!(ub.query(*key).unwrap().as_ref(), want, "ub key={key}");
+        assert_eq!(cb.query(*key).unwrap().as_ref(), want, "cb key={key}");
     }
 
     // A handful of keys not in the set must miss in all three.
@@ -175,4 +175,97 @@ fn locate_duplicate_bins_present_key_regime() {
     assert_eq!(ef, (0, 5), "EF bin=0");
     assert_eq!(ub, (0, 5), "UB bin=0");
     assert_eq!(cb, (0, 5), "CB bin=0");
+}
+
+#[test]
+fn locate_gap_bins_over_repeated_values_agree() {
+    // A query bin above a run of equal values must land on the rightmost block
+    // of the run, not the whole run. This is the case where the Elias-Fano
+    // predecessor once picked the leftmost match and read the whole file.
+    let values = [0usize, 0, 0, 0, 0];
+    let num_bins = 5;
+    for bin in 1..num_bins {
+        let [ef, ub, cb] = locate_all(&values, num_bins, bin);
+        assert_eq!(ef, (4, 1), "EF bin={bin}");
+        assert_eq!(ub, (4, 1), "UB bin={bin}");
+        assert_eq!(cb, (4, 1), "CB bin={bin}");
+    }
+
+    // A mixed run: bins that fall in the gap after the [2,2] run resolve to the
+    // rightmost block whose value is at most the query bin.
+    let values = [0usize, 2, 2, 5];
+    let num_bins = 12;
+    let expected = [
+        (0, (0, 1)),
+        (1, (0, 1)),
+        (2, (0, 3)),
+        (3, (2, 1)),
+        (4, (2, 1)),
+        (5, (2, 2)),
+        (6, (3, 1)),
+        (11, (3, 1)),
+    ];
+    for (bin, want) in expected {
+        let [ef, ub, cb] = locate_all(&values, num_bins, bin);
+        assert_eq!(ef, want, "EF values={values:?} bin={bin}");
+        assert_eq!(ub, want, "UB values={values:?} bin={bin}");
+        assert_eq!(cb, want, "CB values={values:?} bin={bin}");
+    }
+}
+
+#[test]
+fn locate_first_bin_above_zero_never_panics() {
+    // Building an index whose first block bin is above 0 and querying a bin below
+    // it must resolve to block 0, not underflow. Stores never produce this state,
+    // but the index types are public and a caller can.
+    for &first in &[1usize, 2, 5] {
+        for &nb in &[1usize, 3] {
+            let values: Vec<usize> = (0..nb).map(|k| first + k).collect();
+            let num_bins = first + nb + 4;
+            for bin in 0..num_bins {
+                let [ef, ub, cb] = locate_all(&values, num_bins, bin);
+                for (name, (i, count)) in [("ef", ef), ("ub", ub), ("cb", cb)] {
+                    assert!(count >= 1, "{name} empty range values={values:?} bin={bin}");
+                    assert!(
+                        i + count <= nb,
+                        "{name} out of range values={values:?} bin={bin} -> ({i},{count})"
+                    );
+                }
+                // Below the first value every index resolves to block 0.
+                if bin < first {
+                    assert_eq!(ef, (0, 1), "ef bin={bin}");
+                    assert_eq!(ub, (0, 1), "ub bin={bin}");
+                    assert_eq!(cb, (0, 1), "cb bin={bin}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn elias_fano_backing_is_compact() {
+    // The default index must not cost a machine word per block. Its backing
+    // stays within a small factor of the bit-vector variants for a monotonic
+    // sequence.
+    let num_blocks = 1000;
+    let num_bins = 1000;
+    let mut ef = EliasFanoIndex::new(num_blocks, num_bins);
+    let mut ub = UncompressedBitVectorIndex::new(num_blocks, num_bins);
+    for k in 0..num_blocks {
+        ef.push_back(k);
+        ub.push_back(k);
+    }
+    ef.complete();
+    ub.complete();
+    // 64 bits per block would be 8000 bytes. The Elias-Fano split is far under.
+    assert!(
+        ef.space() <= 3 * ub.space(),
+        "ef={} ub={}",
+        ef.space(),
+        ub.space()
+    );
+    assert!(
+        ef.space() * 8 < num_blocks * 8,
+        "ef under one word per block"
+    );
 }

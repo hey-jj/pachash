@@ -20,9 +20,9 @@ fn single_object_spanning_many_blocks() {
     let bytes = PaCHashObjectStore::<EliasFanoIndex>::write_to_file(items).unwrap();
     let store = PaCHashObjectStore::<EliasFanoIndex>::build_index(8, bytes).unwrap();
 
-    assert_eq!(store.query(1).unwrap().value, b"small before");
-    assert_eq!(store.query(2).unwrap().value, big);
-    assert_eq!(store.query(3).unwrap().value, b"small after");
+    assert_eq!(store.query(1).unwrap().as_ref(), b"small before");
+    assert_eq!(store.query(2).unwrap().as_ref(), &big[..]);
+    assert_eq!(store.query(3).unwrap().as_ref(), b"small after");
 }
 
 #[test]
@@ -33,7 +33,11 @@ fn object_exactly_one_block_of_data() {
         let items = vec![(9u64, value.clone())];
         let bytes = PaCHashObjectStore::<EliasFanoIndex>::write_to_file(items).unwrap();
         let store = PaCHashObjectStore::<EliasFanoIndex>::build_index(8, bytes).unwrap();
-        assert_eq!(store.query(9).unwrap().value, value, "extra={extra}");
+        assert_eq!(
+            store.query(9).unwrap().as_ref(),
+            &value[..],
+            "extra={extra}"
+        );
     }
 }
 
@@ -49,7 +53,7 @@ fn many_large_objects_reconstruct() {
     let bytes = PaCHashObjectStore::<EliasFanoIndex>::write_to_file(items.clone()).unwrap();
     let store = PaCHashObjectStore::<EliasFanoIndex>::build_index(8, bytes).unwrap();
     for (key, value) in &items {
-        assert_eq!(&store.query(*key).unwrap().value, value, "key {key}");
+        assert_eq!(store.query(*key).unwrap().as_ref(), &value[..], "key {key}");
     }
 }
 
@@ -70,6 +74,10 @@ fn reader_and_query_agree_on_overlap() {
 
     let store = PaCHashObjectStore::<EliasFanoIndex>::build_index(8, bytes).unwrap();
     for (key, value) in &items {
-        assert_eq!(&store.query(*key).unwrap().value, value, "query key {key}");
+        assert_eq!(
+            store.query(*key).unwrap().as_ref(),
+            &value[..],
+            "query key {key}"
+        );
     }
 }

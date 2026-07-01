@@ -13,7 +13,7 @@ fn present_and_absent_keys() {
     let store = PaCHashObjectStore::<EliasFanoIndex>::build_index(8, bytes).unwrap();
 
     for (key, value) in &items {
-        assert_eq!(store.query(*key).unwrap().value, *value);
+        assert_eq!(store.query(*key).unwrap().as_ref(), &value[..]);
     }
 
     // Keys just outside the present set must miss.
@@ -38,7 +38,7 @@ fn absent_key_returns_none_not_neighbor() {
     let bytes = PaCHashObjectStore::<EliasFanoIndex>::write_to_file(items).unwrap();
     let store = PaCHashObjectStore::<EliasFanoIndex>::build_index(8, bytes).unwrap();
 
-    assert_eq!(store.query(100).unwrap().value, b"hundred");
+    assert_eq!(store.query(100).unwrap().as_ref(), b"hundred");
     assert!(store.query(150).is_none());
     assert!(store.query(250).is_none());
     assert!(store.query(99).is_none());
@@ -55,7 +55,7 @@ fn string_api_roundtrip() {
 
     for (k, v) in &items {
         let result = store.query_string(k).expect("string key present");
-        assert_eq!(result.value, v.as_bytes());
+        assert_eq!(result.as_ref(), v.as_bytes());
     }
     assert!(store.query_string("key_that_is_absent").is_none());
 }
@@ -71,9 +71,9 @@ fn query_on_empty_store_misses() {
 }
 
 #[test]
-fn name_string_format() {
-    assert_eq!(
-        PaCHashObjectStore::<EliasFanoIndex>::name(8),
-        "PaCHashObjectStore a=8 indexStructure=EliasFano"
-    );
+fn display_names_multiplier_and_index() {
+    let bytes =
+        PaCHashObjectStore::<EliasFanoIndex>::write_to_file(vec![(1u64, vec![0u8; 10])]).unwrap();
+    let store = PaCHashObjectStore::<EliasFanoIndex>::build_index(8, bytes).unwrap();
+    assert_eq!(store.to_string(), "PaCHashObjectStore a=8 index=EliasFano");
 }

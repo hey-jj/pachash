@@ -34,7 +34,7 @@ fn single_small_object_terminator_path() {
     let items = vec![(5u64, b"tiny".to_vec())];
     let bytes = PaCHashObjectStore::<EliasFanoIndex>::write_to_file(items).unwrap();
     let store = PaCHashObjectStore::<EliasFanoIndex>::build_index(8, bytes).unwrap();
-    assert_eq!(store.query(5).unwrap().value, b"tiny");
+    assert_eq!(store.query(5).unwrap().as_ref(), b"tiny");
     assert_eq!(store.num_objects(), 1);
 }
 
@@ -45,7 +45,7 @@ fn close_terminator_both_branches() {
     let items_a = vec![(1u64, vec![1u8; 10]), (2u64, vec![2u8; 10])];
     let store_a = build(items_a.clone());
     for (k, v) in &items_a {
-        assert_eq!(&store_a.query(*k).unwrap().value, v);
+        assert_eq!(store_a.query(*k).unwrap().as_ref(), &v[..]);
     }
 
     // Branch B: fill a block so at most 128 bytes remain, then close flushes
@@ -53,7 +53,11 @@ fn close_terminator_both_branches() {
     for target in (BLOCK_LENGTH - 260)..(BLOCK_LENGTH - 60) {
         let value = vec![0x7u8; target];
         let store_b = build(vec![(3u64, value.clone())]);
-        assert_eq!(store_b.query(3).unwrap().value, value, "target={target}");
+        assert_eq!(
+            store_b.query(3).unwrap().as_ref(),
+            &value[..],
+            "target={target}"
+        );
     }
 }
 
@@ -68,7 +72,7 @@ fn empty_bins_between_blocks() {
     }
     let store = build(items.clone());
     for (key, value) in &items {
-        assert_eq!(&store.query(*key).unwrap().value, value, "key {key}");
+        assert_eq!(store.query(*key).unwrap().as_ref(), &value[..], "key {key}");
     }
 }
 

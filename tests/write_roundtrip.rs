@@ -84,6 +84,6 @@ fn query_finds_every_key() {
     assert_eq!(store.num_objects(), expected.len());
     for (key, value) in &expected {
         let result = store.query(*key).expect("key present");
-        assert_eq!(&result.value, value, "key {key}");
+        assert_eq!(result.as_ref(), &value[..], "key {key}");
     }
 }

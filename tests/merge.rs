@@ -21,7 +21,7 @@ fn merge_two_disjoint_stores() {
 
     assert_eq!(store.num_objects(), expected.len());
     for (key, value) in &expected {
-        assert_eq!(&store.query(*key).unwrap().value, value, "key {key}");
+        assert_eq!(store.query(*key).unwrap().as_ref(), &value[..], "key {key}");
     }
 }
 
@@ -46,7 +46,7 @@ fn merge_three_stores_with_overlap_objects() {
     let store = PaCHashObjectStore::<EliasFanoIndex>::build_index(8, merged).unwrap();
     assert_eq!(store.num_objects(), expected.len());
     for (key, value) in &expected {
-        assert_eq!(&store.query(*key).unwrap().value, value, "key {key}");
+        assert_eq!(store.query(*key).unwrap().as_ref(), &value[..], "key {key}");
     }
 }
 
@@ -73,7 +73,7 @@ fn merge_single_store_is_identity_on_contents() {
     let store = PaCHashObjectStore::<EliasFanoIndex>::build_index(8, merged).unwrap();
     assert_eq!(store.num_objects(), expected.len());
     for (key, value) in &expected {
-        assert_eq!(&store.query(*key).unwrap().value, value);
+        assert_eq!(store.query(*key).unwrap().as_ref(), &value[..]);
     }
 }
 

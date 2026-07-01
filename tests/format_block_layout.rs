@@ -18,9 +18,9 @@ fn constants_match_layout() {
 #[test]
 fn metadata_byte_offsets() {
     // The header image must place fields at the LP64 struct offsets: magic at 0,
-    // version at 32, type at 34, num_blocks at 40, max_size at 48.
+    // version at 32, kind at 34, num_blocks at 40, max_size at 48.
     let meta = StoreMetadata {
-        type_: StoreMetadata::TYPE_PACHASH,
+        kind: StoreMetadata::TYPE_PACHASH,
         num_blocks: 0x1122_3344_5566_7788,
         max_size: 0x99AA_BBCC_DDEE_FF00,
     };
@@ -43,7 +43,7 @@ fn metadata_byte_offsets() {
 #[test]
 fn metadata_round_trips() {
     let meta = StoreMetadata {
-        type_: StoreMetadata::TYPE_SEPARATOR + 6,
+        kind: StoreMetadata::TYPE_SEPARATOR + 6,
         num_blocks: 42,
         max_size: 5000,
     };
@@ -79,7 +79,7 @@ fn header_carries_block_count() {
     let items = common::gen_items(50, 200);
     let bytes = PaCHashObjectStore::<EliasFanoIndex>::write_to_file(items).unwrap();
     let meta = StoreMetadata::from_bytes(&bytes).unwrap();
-    assert_eq!(meta.type_, StoreMetadata::TYPE_PACHASH);
+    assert_eq!(meta.kind, StoreMetadata::TYPE_PACHASH);
     assert_eq!(meta.num_blocks as usize, bytes.len() / BLOCK_LENGTH);
 }
 
