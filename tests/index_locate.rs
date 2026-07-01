@@ -114,3 +114,65 @@ fn direct_locate_strictly_increasing() {
         assert!(r.0 + r.1 <= num_blocks);
     }
 }
+
+/// A `(first_block, count)` range returned by `locate`.
+type Range = (usize, usize);
+
+/// Locate a bin with each index and return all three results.
+fn locate_all(values: &[usize], num_bins: usize, bin: usize) -> [Range; 3] {
+    let nb = values.len();
+    let mut ef = EliasFanoIndex::new(nb, num_bins);
+    let mut ub = UncompressedBitVectorIndex::new(nb, num_bins);
+    let mut cb = CompressedBitVectorIndex::new(nb, num_bins);
+    for &v in values {
+        ef.push_back(v);
+        ub.push_back(v);
+        cb.push_back(v);
+    }
+    ef.complete();
+    ub.complete();
+    cb.complete();
+    [ef.locate(bin), ub.locate(bin), cb.locate(bin)]
+}
+
+#[test]
+fn locate_canonical_values() {
+    // Expected (first_block, count) for known bin sequences. The values come from
+    // the predecessor arithmetic: the predecessor of a bin is the rightmost block
+    // whose value is at most the bin. On an exact match the range backs up one
+    // block to the left, then extends right over blocks that share the value.
+    //
+    // Table rows: (values, num_bins, bin, expected).
+    type Row = (&'static [usize], usize, usize, Range);
+    let cases: &[Row] = &[
+        // A single block covers every bin.
+        (&[0], 4, 0, (0, 1)),
+        (&[0], 4, 3, (0, 1)),
+        // Strictly increasing bins, distinct blocks.
+        (&[0, 1, 3], 6, 0, (0, 1)),
+        (&[0, 1, 3], 6, 1, (0, 2)),
+        (&[0, 1, 3], 6, 2, (1, 1)),
+        (&[0, 1, 3], 6, 3, (1, 2)),
+        (&[0, 1, 3], 6, 5, (2, 1)),
+    ];
+    for &(values, num_bins, bin, expected) in cases {
+        let [ef, ub, cb] = locate_all(values, num_bins, bin);
+        assert_eq!(ef, expected, "EF values={values:?} bin={bin}");
+        assert_eq!(ub, expected, "UB values={values:?} bin={bin}");
+        assert_eq!(cb, expected, "CB values={values:?} bin={bin}");
+    }
+}
+
+#[test]
+fn locate_duplicate_bins_present_key_regime() {
+    // When every block shares the same bin value, a query for that exact bin must
+    // return the whole run so the scan can find any key inside it. This is the
+    // regime that real construction produces when all keys are tiny.
+    let values = [0usize, 0, 0, 0, 0];
+    let num_bins = 5;
+    // Bin 0 is the shared value. All three return the full run of blocks.
+    let [ef, ub, cb] = locate_all(&values, num_bins, 0);
+    assert_eq!(ef, (0, 5), "EF bin=0");
+    assert_eq!(ub, (0, 5), "UB bin=0");
+    assert_eq!(cb, (0, 5), "CB bin=0");
+}
