@@ -23,7 +23,7 @@ let items = vec![(10u64, b"alpha".to_vec()), (20u64, b"beta".to_vec())];
 let bytes = PaCHashObjectStore::<EliasFanoIndex>::write_to_file(items).unwrap();
 let store = PaCHashObjectStore::<EliasFanoIndex>::build_index(8, bytes).unwrap();
 
-assert_eq!(store.query(10).unwrap().value, b"alpha");
+assert_eq!(&*store.query(10).unwrap(), b"alpha");
 assert!(store.query(30).is_none());
 ```
 
