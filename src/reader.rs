@@ -22,18 +22,15 @@ pub struct Object {
 /// After construction the reader is positioned on the first real object. Read
 /// [`current_key`](Self::current_key) and [`current_value`](Self::current_value),
 /// then call [`advance`](Self::advance) to move on. Check
-/// [`has_ended`](Self::has_ended) before advancing.
+/// [`has_current`](Self::has_current) before reading.
+#[derive(Debug)]
 pub struct LinearObjectReader<'a> {
     data: &'a [u8],
-    /// Number of blocks in the file.
-    pub num_blocks: usize,
-    /// Largest object length recorded in the header.
-    pub max_size: usize,
+    num_blocks: usize,
     current_block: usize,
     block: BlockStorage,
     current_element: usize,
-    /// True once the reader has consumed its last object.
-    pub completed: bool,
+    completed: bool,
     current_key: u64,
     current_value: Vec<u8>,
 }
@@ -51,7 +48,6 @@ impl<'a> LinearObjectReader<'a> {
         let mut reader = LinearObjectReader {
             data,
             num_blocks,
-            max_size: metadata.max_size as usize,
             current_block: 0,
             block,
             current_element: 0,
@@ -63,14 +59,6 @@ impl<'a> LinearObjectReader<'a> {
         // object, or on the terminator when the store is empty.
         reader.advance();
         Ok(reader)
-    }
-
-    /// True when the reader has passed the last data block.
-    ///
-    /// The last block is a terminator, so real objects live in blocks
-    /// `0..num_blocks - 1`.
-    pub fn has_ended(&self) -> bool {
-        self.current_block == usize::MAX || self.current_block >= self.num_blocks - 1
     }
 
     /// Key of the object currently positioned.
@@ -86,11 +74,6 @@ impl<'a> LinearObjectReader<'a> {
     /// True while a real object is positioned and not yet consumed.
     pub fn has_current(&self) -> bool {
         !self.completed
-    }
-
-    /// Mark the reader done. Used by [`crate::merge`] after the last object.
-    pub fn mark_completed(&mut self) {
-        self.completed = true;
     }
 
     fn load_block(&mut self, index: usize) {

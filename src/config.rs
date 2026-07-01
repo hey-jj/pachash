@@ -34,8 +34,8 @@ pub const VERSION: u8 = 1;
 /// [`STORE_METADATA_SIZE`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StoreMetadata {
-    /// Store type. See the `TYPE_*` associated constants.
-    pub type_: u16,
+    /// Store kind. See the `TYPE_*` associated constants.
+    pub kind: u16,
     /// Number of blocks in the file.
     pub num_blocks: u64,
     /// Largest object length written to the file.
@@ -55,7 +55,7 @@ impl StoreMetadata {
         let mut out = [0u8; STORE_METADATA_SIZE];
         out[0..32].copy_from_slice(&MAGIC);
         out[32] = VERSION;
-        out[34..36].copy_from_slice(&self.type_.to_le_bytes());
+        out[34..36].copy_from_slice(&self.kind.to_le_bytes());
         out[40..48].copy_from_slice(&self.num_blocks.to_le_bytes());
         out[48..56].copy_from_slice(&self.max_size.to_le_bytes());
         out
@@ -76,11 +76,11 @@ impl StoreMetadata {
         if version != VERSION {
             return Err(MetadataError::BadVersion(version));
         }
-        let type_ = u16::from_le_bytes([data[34], data[35]]);
+        let kind = u16::from_le_bytes([data[34], data[35]]);
         let num_blocks = u64::from_le_bytes(data[40..48].try_into().unwrap());
         let max_size = u64::from_le_bytes(data[48..56].try_into().unwrap());
         Ok(StoreMetadata {
-            type_,
+            kind,
             num_blocks,
             max_size,
         })

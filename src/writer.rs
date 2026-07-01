@@ -14,6 +14,7 @@ use crate::config::{
 ///
 /// Call [`write`](LinearObjectWriter::write) for each object in key order, then
 /// [`finish`](LinearObjectWriter::finish) to get the file bytes.
+#[derive(Debug)]
 pub struct LinearObjectWriter {
     /// Finished blocks, each exactly [`BLOCK_LENGTH`] bytes.
     blocks: Vec<u8>,
@@ -26,7 +27,7 @@ pub struct LinearObjectWriter {
     block_writing_position: usize,
     max_size: usize,
     /// Number of full blocks produced so far.
-    pub blocks_generated: usize,
+    blocks_generated: usize,
 }
 
 impl Default for LinearObjectWriter {
@@ -55,6 +56,11 @@ impl LinearObjectWriter {
         let dummy = [0u8; STORE_METADATA_SIZE];
         writer.write(0, &dummy);
         writer
+    }
+
+    /// Number of full blocks produced so far.
+    pub fn blocks_generated(&self) -> usize {
+        self.blocks_generated
     }
 
     /// Append one object.
@@ -113,7 +119,7 @@ impl LinearObjectWriter {
     /// When the current block still has room, a zero-length terminator object
     /// with key 0 marks the end of the last real object. Block 0's header is
     /// patched with the real block count, max size, and store type.
-    pub fn finish(mut self, type_: u16) -> Vec<u8> {
+    pub fn finish(mut self, kind: u16) -> Vec<u8> {
         if self.space_left_on_block <= 128 {
             let empty = self.space_left_on_block as u8;
             self.write_table(empty);
@@ -123,7 +129,7 @@ impl LinearObjectWriter {
         }
 
         let metadata = StoreMetadata {
-            type_,
+            kind,
             num_blocks: self.blocks_generated as u64,
             max_size: self.max_size as u64,
         };

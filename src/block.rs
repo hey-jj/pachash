@@ -97,25 +97,4 @@ impl BlockStorage {
             data[base..base + 2].copy_from_slice(&off.to_le_bytes());
         }
     }
-
-    /// Find a key in a block that uses the non-overlapping table convention.
-    ///
-    /// The Separator and Cuckoo writers store shifted cumulative offsets. Object
-    /// 0 starts at 0. Object `i > 0` starts at `offsets[i - 1]`. The last entry
-    /// holds the end of the last object. Returns `(length, start_offset)` on a
-    /// hit or `None` when the key is absent.
-    pub fn find_key_non_overlapping(&self, key: u64) -> Option<(usize, usize)> {
-        for i in 0..self.num_objects as usize {
-            if self.keys[i] == key {
-                if i == 0 {
-                    return Some((self.offsets[0] as usize, 0));
-                } else {
-                    let start = self.offsets[i - 1] as usize;
-                    let len = self.offsets[i] as usize - start;
-                    return Some((len, start));
-                }
-            }
-        }
-        None
-    }
 }

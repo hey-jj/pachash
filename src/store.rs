@@ -5,6 +5,8 @@
 //! 64-bit key, packs them fully into blocks, and builds a predecessor index that
 //! maps a key's bin to the block range holding it.
 
+use std::borrow::Cow;
+
 use crate::block::BlockStorage;
 use crate::config::{MetadataError, StoreMetadata, BLOCK_LENGTH};
 use crate::hash::{key2bin, murmur_hash64};
@@ -40,13 +42,6 @@ impl From<MetadataError> for StoreError {
     }
 }
 
-/// Result of a query: a slice of the loaded buffer, or `None` when absent.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct QueryResult {
-    /// The value bytes of the found object.
-    pub value: Vec<u8>,
-}
-
 /// A static store over variable-size objects, generic over its index.
 pub struct PaCHashObjectStore<I: Index> {
     /// The bin multiplier. `num_bins = num_blocks * a`.
@@ -59,12 +54,26 @@ pub struct PaCHashObjectStore<I: Index> {
     num_objects: usize,
 }
 
-impl<I: Index> PaCHashObjectStore<I> {
-    /// The `name()` string for a given index.
-    pub fn name(a: u16) -> String {
-        format!("PaCHashObjectStore a={} indexStructure={}", a, I::name())
+impl<I: Index> std::fmt::Debug for PaCHashObjectStore<I> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PaCHashObjectStore")
+            .field("a", &self.a)
+            .field("num_blocks", &self.num_blocks)
+            .field("num_bins", &self.num_bins)
+            .field("max_size", &self.max_size)
+            .field("num_objects", &self.num_objects)
+            .finish_non_exhaustive()
     }
+}
 
+/// Human-readable label naming the bin multiplier and index kind.
+impl<I: Index> std::fmt::Display for PaCHashObjectStore<I> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "PaCHashObjectStore a={} index={}", self.a, I::name())
+    }
+}
+
+impl<I: Index> PaCHashObjectStore<I> {
     /// Bin of a key for this store's bin count.
     pub fn key2bin(&self, key: u64) -> usize {
         key2bin(key, self.num_bins as u64) as usize
@@ -125,12 +134,9 @@ impl<I: Index> PaCHashObjectStore<I> {
     /// Open a store's bytes and build the in-memory index.
     ///
     /// Returns an error when the header is bad or the type is not PaCHash.
-    pub fn build_index(a: u16, data: Vec<u8>) -> Result<PaCHashObjectStore<I>, StoreError>
-    where
-        I: IndexCtor,
-    {
+    pub fn build_index(a: u16, data: Vec<u8>) -> Result<PaCHashObjectStore<I>, StoreError> {
         let metadata = StoreMetadata::from_bytes(&data)?;
-        if metadata.type_ != StoreMetadata::TYPE_PACHASH {
+        if metadata.kind != StoreMetadata::TYPE_PACHASH {
             return Err(StoreError::WrongType);
         }
         let num_blocks = metadata.num_blocks as usize;
@@ -193,8 +199,10 @@ impl<I: Index> PaCHashObjectStore<I> {
 
     /// Look up a key.
     ///
-    /// Returns the value bytes when present, or `None` when absent.
-    pub fn query(&self, key: u64) -> Option<QueryResult> {
+    /// Returns the value bytes when present, or `None` when absent. A value that
+    /// fits in one block borrows from the store. A value stitched across blocks
+    /// owns a fresh buffer, so the return type is a [`Cow`].
+    pub fn query(&self, key: u64) -> Option<Cow<'_, [u8]>> {
         let bin = self.key2bin(key);
         let (first_block, blocks_accessed) = self.index.locate(bin);
 
@@ -215,27 +223,31 @@ impl<I: Index> PaCHashObjectStore<I> {
     }
 
     /// Rebuild the value for a matched key, stitching across blocks if needed.
-    fn reconstruct(
+    fn reconstruct<'w>(
         &self,
-        window: &[u8],
+        window: &'w [u8],
         i: usize,
         block: &BlockStorage,
         mut block_idx: usize,
         blocks_accessed: usize,
-    ) -> QueryResult {
+    ) -> Cow<'w, [u8]> {
         let block_ptr = block_idx * BLOCK_LENGTH;
         if i < block.num_objects as usize - 1 {
             let start = block.offsets[i] as usize;
             let end = block.offsets[i + 1] as usize;
-            let value = window[block_ptr + start..block_ptr + end].to_vec();
-            return QueryResult { value };
+            return Cow::Borrowed(&window[block_ptr + start..block_ptr + end]);
         }
 
         // The object is the block's last object. It overlaps into later blocks.
         let start = block.offsets[i] as usize;
         let on_this_block = block.table_start - start - block.empty_page_end as usize;
-        let mut value = window[block_ptr + start..block_ptr + start + on_this_block].to_vec();
+        let last_ptr = block_ptr + start;
+        // A single-block last object still fits its own slice.
+        if block_idx + 1 >= blocks_accessed {
+            return Cow::Borrowed(&window[last_ptr..last_ptr + on_this_block]);
+        }
 
+        let mut value = window[last_ptr..last_ptr + on_this_block].to_vec();
         block_idx += 1;
         while block_idx < blocks_accessed {
             let next_ptr = block_idx * BLOCK_LENGTH;
@@ -243,7 +255,7 @@ impl<I: Index> PaCHashObjectStore<I> {
             if next.num_objects > 0 {
                 let len_on_next = next.offsets[0] as usize;
                 value.extend_from_slice(&window[next_ptr..next_ptr + len_on_next]);
-                return QueryResult { value };
+                return Cow::Owned(value);
             } else {
                 let len_on_next = next.table_start;
                 let keep = len_on_next - next.empty_page_end as usize;
@@ -251,47 +263,16 @@ impl<I: Index> PaCHashObjectStore<I> {
             }
             block_idx += 1;
         }
-        QueryResult { value }
+        Cow::Owned(value)
     }
 
     /// Look up a string key using the default hash.
-    pub fn query_string(&self, key: &str) -> Option<QueryResult> {
+    pub fn query_string(&self, key: &str) -> Option<Cow<'_, [u8]>> {
         self.query(murmur_hash64(key.as_bytes()))
     }
 
     /// Access to the store's raw bytes.
     pub fn data(&self) -> &[u8] {
         &self.data
-    }
-
-    /// The bin multiplier `a`.
-    pub fn a(&self) -> u16 {
-        self.a
-    }
-}
-
-/// Constructs an index sized for a file.
-///
-/// This lets [`PaCHashObjectStore::build_index`] create any index variant.
-pub trait IndexCtor: Index {
-    /// Create an index for `num_blocks` blocks and `num_bins` bins.
-    fn new(num_blocks: usize, num_bins: usize) -> Self;
-}
-
-impl IndexCtor for crate::index::EliasFanoIndex {
-    fn new(num_blocks: usize, num_bins: usize) -> Self {
-        crate::index::EliasFanoIndex::new(num_blocks, num_bins)
-    }
-}
-
-impl IndexCtor for crate::index::UncompressedBitVectorIndex {
-    fn new(num_blocks: usize, num_bins: usize) -> Self {
-        crate::index::UncompressedBitVectorIndex::new(num_blocks, num_bins)
-    }
-}
-
-impl IndexCtor for crate::index::CompressedBitVectorIndex {
-    fn new(num_blocks: usize, num_bins: usize) -> Self {
-        crate::index::CompressedBitVectorIndex::new(num_blocks, num_bins)
     }
 }

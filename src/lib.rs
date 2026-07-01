@@ -21,8 +21,8 @@
 //! let bytes = PaCHashObjectStore::<EliasFanoIndex>::write_to_file(items).unwrap();
 //! let store = PaCHashObjectStore::<EliasFanoIndex>::build_index(8, bytes).unwrap();
 //!
-//! assert_eq!(store.query(10).unwrap().value, b"alpha");
-//! assert_eq!(store.query(20).unwrap().value, b"beta");
+//! assert_eq!(&*store.query(10).unwrap(), b"alpha");
+//! assert_eq!(&*store.query(20).unwrap(), b"beta");
 //! assert!(store.query(30).is_none());
 //! ```
 //!
@@ -52,5 +52,5 @@ pub use hash::{ceillog2, fastrange64, key2bin, murmur_hash64, murmur_hash64_seed
 pub use index::{CompressedBitVectorIndex, EliasFanoIndex, Index, UncompressedBitVectorIndex};
 pub use merge::{merge, MergeError};
 pub use reader::{LinearObjectReader, Object};
-pub use store::{IndexCtor, PaCHashObjectStore, QueryResult, StoreError};
+pub use store::{PaCHashObjectStore, StoreError};
 pub use writer::LinearObjectWriter;
