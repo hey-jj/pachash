@@ -70,17 +70,7 @@ pub fn merge(inputs: &[Vec<u8>]) -> Result<Vec<u8>, MergeError> {
         };
         let value = readers[idx].current_value().to_vec();
         writer.write(min_key, &value);
-
-        let reader = &mut readers[idx];
-        if reader.has_ended() {
-            // The final object of this input has been consumed.
-            reader.mark_completed();
-        } else {
-            reader.advance();
-            if reader.current_key() == 0 {
-                reader.mark_completed();
-            }
-        }
+        readers[idx].advance();
     }
 
     Ok(writer.finish(StoreMetadata::TYPE_PACHASH))

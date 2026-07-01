@@ -138,7 +138,7 @@ impl<I: Index> PaCHashObjectStore<I> {
         let num_bins = num_blocks * a as usize;
 
         let mut index = I::new(num_blocks, num_bins);
-        let mut keys_read = 0;
+        let mut real_objects = 0;
         let mut last_key_in_previous_block: u64 = 0;
 
         for blocks_read in 0..num_blocks {
@@ -163,13 +163,12 @@ impl<I: Index> PaCHashObjectStore<I> {
                 debug_assert!(key > last_key_in_previous_block || blocks_read == num_blocks - 1);
                 last_key_in_previous_block = key;
             }
-            keys_read += block.num_objects as usize;
+            // Count real objects. Key 0 marks the header and the terminator.
+            real_objects += block.keys.iter().filter(|&&k| k != 0).count();
         }
 
         index.complete();
-        // keys_read counts every table entry: the header on block 0 and the
-        // terminator both use key 0. Discount them for the public object count.
-        let num_objects = keys_read.saturating_sub(2);
+        let num_objects = real_objects;
 
         Ok(PaCHashObjectStore {
             a,
@@ -182,7 +181,7 @@ impl<I: Index> PaCHashObjectStore<I> {
         })
     }
 
-    /// Buffer size a query needs, matching the reference sizing.
+    /// Buffer size a query needs to hold a worst-case multi-block object.
     pub fn required_buffer_per_query(&self) -> usize {
         4 * (self.max_size + BLOCK_LENGTH - 1)
     }

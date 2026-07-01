@@ -95,9 +95,8 @@ impl BitVector {
 
 /// Elias-Fano style index. The default and most compact variant.
 ///
-/// This implementation stores the monotonic bin sequence directly. The
-/// `fano_size` type parameter of the reference only tunes the encoding, not the
-/// results, so it is omitted here.
+/// This stores the monotonic bin sequence directly. A width parameter would only
+/// tune the encoding, not the query results, so it is omitted.
 pub struct EliasFanoIndex {
     num_blocks: usize,
     values: Vec<usize>,
@@ -112,18 +111,19 @@ impl EliasFanoIndex {
         }
     }
 
-    /// Largest index whose value is `<= bin`. Returns 0 when all values exceed
-    /// `bin`, matching the reference predecessor behavior on the first element.
+    /// Position of the predecessor of `bin`.
+    ///
+    /// Returns the first index whose value equals the greatest value `<= bin`.
+    /// Returning the first such index lets the exact-match back-up and the
+    /// forward scan in [`locate`](Index::locate) span all equal values. When all
+    /// values exceed `bin`, returns 0.
     fn predecessor_position(&self, bin: usize) -> usize {
-        let mut pos = 0;
-        for (i, &v) in self.values.iter().enumerate() {
-            if v <= bin {
-                pos = i;
-            } else {
-                break;
-            }
+        // Greatest value that is <= bin, if any.
+        let pred_value = self.values.iter().copied().filter(|&v| v <= bin).max();
+        match pred_value {
+            Some(pv) => self.values.iter().position(|&v| v == pv).unwrap(),
+            None => 0,
         }
-        pos
     }
 }
 
@@ -194,11 +194,7 @@ impl Index for UncompressedBitVectorIndex {
 
     fn locate(&self, bin: usize) -> (usize, usize) {
         let bv = &self.bit_vector;
-        let possible_position_of_b = if bin == 0 {
-            0
-        } else {
-            bv.select0(bin) + 1
-        };
+        let possible_position_of_b = if bin == 0 { 0 } else { bv.select0(bin) + 1 };
         let array_index_of_predecessor = if bin == 0 {
             0
         } else {
@@ -227,9 +223,9 @@ impl Index for UncompressedBitVectorIndex {
 /// Compressed bit vector index.
 ///
 /// Uses the same bit layout as [`UncompressedBitVectorIndex`] but a different
-/// `locate` arithmetic. The reference compresses the backing with block Huffman
-/// coding. Results are identical, so this implementation keeps the plain
-/// backing and mirrors the compressed variant's math.
+/// `locate` arithmetic based on rank and select. A block-compressed backing
+/// would shrink the memory footprint without changing any query result, so this
+/// keeps the plain backing and the compressed-path math.
 pub struct CompressedBitVectorIndex {
     bit_vector: BitVector,
     num_pushed: usize,
@@ -259,11 +255,7 @@ impl Index for CompressedBitVectorIndex {
 
     fn locate(&self, bin: usize) -> (usize, usize) {
         let bv = &self.bit_vector;
-        let possible_position_of_b = if bin == 0 {
-            0
-        } else {
-            bv.select0(bin) + 1
-        };
+        let possible_position_of_b = if bin == 0 { 0 } else { bv.select0(bin) + 1 };
         let array_index_of_predecessor = bv.rank1(possible_position_of_b + 1) - 1;
         let bit_vector_index_of_predecessor = bv.select1(array_index_of_predecessor + 1);
         let value_of_predecessor = bit_vector_index_of_predecessor - array_index_of_predecessor;

@@ -63,8 +63,8 @@ impl StoreMetadata {
 
     /// Parse from the first 56 bytes of block 0.
     ///
-    /// Returns an error when the magic or version does not match, matching the
-    /// validation order of the reference file reader.
+    /// Checks the magic bytes first, then the version. Returns an error when
+    /// either does not match.
     pub fn from_bytes(data: &[u8]) -> Result<Self, MetadataError> {
         if data.len() < STORE_METADATA_SIZE {
             return Err(MetadataError::Truncated);
@@ -103,7 +103,10 @@ impl core::fmt::Display for MetadataError {
         match self {
             MetadataError::Truncated => write!(f, "file is too short to hold metadata"),
             MetadataError::BadMagic => {
-                write!(f, "magic bytes do not match. Is this really an object store?")
+                write!(
+                    f,
+                    "magic bytes do not match. Is this really an object store?"
+                )
             }
             MetadataError::BadVersion(v) => write!(
                 f,

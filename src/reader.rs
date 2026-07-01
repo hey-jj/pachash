@@ -59,12 +59,9 @@ impl<'a> LinearObjectReader<'a> {
             current_key: 0,
             current_value: Vec::new(),
         };
-        // Skip pseudo object 0 (the header). An empty store lands on the
-        // terminator, whose key is 0, and is immediately done.
+        // Skip pseudo object 0 (the header). This lands on the first real
+        // object, or on the terminator when the store is empty.
         reader.advance();
-        if reader.current_key == 0 {
-            reader.completed = true;
-        }
         Ok(reader)
     }
 
@@ -110,8 +107,13 @@ impl<'a> LinearObjectReader<'a> {
     /// Advance to the next object.
     ///
     /// Reconstructs across blocks when the current object is the block's last
-    /// object and its data overlaps into following blocks.
+    /// object and its data overlaps into following blocks. Marks the reader
+    /// completed on the terminator or after the final object.
     pub fn advance(&mut self) {
+        if self.completed || self.current_block == usize::MAX {
+            self.completed = true;
+            return;
+        }
         self.current_element = self.current_element.wrapping_add(1);
         let elem = self.current_element;
         self.current_key = self.block.keys[elem];
@@ -132,12 +134,14 @@ impl<'a> LinearObjectReader<'a> {
         let mut value = self.data[base + start..base + start + on_this_block].to_vec();
 
         if self.current_key == 0 {
-            // The terminator object. Nothing to reconstruct.
+            // The terminator object marks the end of real data.
             self.current_value = value;
+            self.completed = true;
             return;
         }
 
         if self.current_block == self.num_blocks - 1 {
+            // The last object exactly fills the last block. No terminator block.
             self.current_block = usize::MAX;
             self.current_value = value;
             return;
@@ -167,13 +171,7 @@ impl<'a> LinearObjectReader<'a> {
                 key: self.current_key,
                 value: self.current_value.clone(),
             });
-            if self.has_ended() {
-                break;
-            }
             self.advance();
-            if self.current_key == 0 {
-                break;
-            }
         }
         out
     }
