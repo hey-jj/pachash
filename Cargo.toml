@@ -1,0 +1,10 @@
+[package]
+name = "pachash"
+version = "0.1.0"
+edition = "2021"
+description = "space-efficient static hash index over an on-disk variable-size object store"
+license = "MIT"
+repository = "https://github.com/hey-jj/pachash"
+readme = "README.md"
+
+[dependencies]
