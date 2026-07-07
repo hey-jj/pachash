@@ -47,7 +47,14 @@ impl<'a> LinearObjectReader<'a> {
         if num_blocks > data.len() / BLOCK_LENGTH {
             return Err(crate::config::MetadataError::Truncated);
         }
-        let block = BlockStorage::parse(&data[0..BLOCK_LENGTH]);
+        for block_index in 0..num_blocks {
+            let start = block_index * BLOCK_LENGTH;
+            if BlockStorage::parse_from_store(&data[start..start + BLOCK_LENGTH]).is_none() {
+                return Err(crate::config::MetadataError::Truncated);
+            }
+        }
+        let block = BlockStorage::parse_from_store(&data[0..BLOCK_LENGTH])
+            .ok_or(crate::config::MetadataError::Truncated)?;
         let mut reader = LinearObjectReader {
             data,
             num_blocks,

@@ -14,6 +14,8 @@
 
 use crate::config::{BLOCK_LENGTH, OVERHEAD_PER_BLOCK, OVERHEAD_PER_OBJECT};
 
+const MAX_OBJECTS_PER_BLOCK: usize = (BLOCK_LENGTH - OVERHEAD_PER_BLOCK) / OVERHEAD_PER_OBJECT;
+
 /// A parsed view of one 4096-byte block.
 ///
 /// Field meanings match the on-disk layout described in the module docs.
@@ -39,10 +41,21 @@ impl BlockStorage {
     /// # Panics
     /// Panics when `data` is shorter than [`BLOCK_LENGTH`].
     pub fn parse(data: &[u8]) -> BlockStorage {
+        Self::parse_inner(data).expect("block object table must fit in 4096 bytes")
+    }
+
+    pub(crate) fn parse_from_store(data: &[u8]) -> Option<BlockStorage> {
+        Self::parse_inner(data)
+    }
+
+    fn parse_inner(data: &[u8]) -> Option<BlockStorage> {
         assert!(data.len() >= BLOCK_LENGTH, "block must be 4096 bytes");
         let num_objects = u16::from_le_bytes([data[BLOCK_LENGTH - 2], data[BLOCK_LENGTH - 1]]);
         let empty_page_end = data[BLOCK_LENGTH - OVERHEAD_PER_BLOCK];
         let n = num_objects as usize;
+        if n > MAX_OBJECTS_PER_BLOCK {
+            return None;
+        }
         let table_start = BLOCK_LENGTH - OVERHEAD_PER_BLOCK - n * OVERHEAD_PER_OBJECT;
 
         let mut keys = Vec::with_capacity(n);
@@ -57,13 +70,13 @@ impl BlockStorage {
             offsets.push(u16::from_le_bytes([data[base], data[base + 1]]));
         }
 
-        BlockStorage {
+        Some(BlockStorage {
             num_objects,
             empty_page_end,
             table_start,
             offsets,
             keys,
-        }
+        })
     }
 
     /// Write the trailer of a block into `data`.

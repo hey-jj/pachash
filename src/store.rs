@@ -157,7 +157,8 @@ impl<I: Index> PaCHashObjectStore<I> {
 
         for blocks_read in 0..num_blocks {
             let start = blocks_read * BLOCK_LENGTH;
-            let block = BlockStorage::parse(&data[start..start + BLOCK_LENGTH]);
+            let block = BlockStorage::parse_from_store(&data[start..start + BLOCK_LENGTH])
+                .ok_or(StoreError::TruncatedBody)?;
 
             let last_bin_in_previous_block =
                 key2bin(last_key_in_previous_block, num_bins as u64) as usize;

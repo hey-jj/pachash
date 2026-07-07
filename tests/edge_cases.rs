@@ -135,6 +135,18 @@ fn forged_block_count_is_rejected_not_panicked() {
     }
 }
 
+#[test]
+fn forged_table_count_is_rejected() {
+    let mut bytes = PaCHashObjectStore::<EliasFanoIndex>::write_to_file(vec![]).unwrap();
+    bytes[BLOCK_LENGTH - 2..BLOCK_LENGTH].copy_from_slice(&500u16.to_le_bytes());
+
+    let err = PaCHashObjectStore::<EliasFanoIndex>::build_index(8, bytes.clone()).unwrap_err();
+    assert_eq!(err, StoreError::TruncatedBody);
+
+    let err = LinearObjectReader::new(&bytes).unwrap_err();
+    assert_eq!(err, MetadataError::Truncated);
+}
+
 fn build(items: Vec<(u64, Vec<u8>)>) -> PaCHashObjectStore<EliasFanoIndex> {
     let bytes = PaCHashObjectStore::<EliasFanoIndex>::write_to_file(items).unwrap();
     PaCHashObjectStore::<EliasFanoIndex>::build_index(8, bytes).unwrap()
